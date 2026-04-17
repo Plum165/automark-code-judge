@@ -1,0 +1,6 @@
+{
+  "name": "Automark Code Judge",
+  "description": "An automated code judging system that evaluates programming assignments using Gemini AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
