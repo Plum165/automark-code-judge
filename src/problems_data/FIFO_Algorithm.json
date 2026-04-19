@@ -1,12 +1,15 @@
-[
-  { "input": "3, 70120", "expected": "Page faults: 4." },
-  { "input": "3, 123412", "expected": "Page faults: 6." },
-  { "input": "4, 12345", "expected": "Page faults: 5." },
-  { "input": "2, 12123", "expected": "Page faults: 3." },
-  { "input": "3, 01010", "expected": "Page faults: 2." },
-  { "input": "3, 701203", "expected": "Page faults: 5." },
-  { "input": "4, 012301", "expected": "Page faults: 4." },
-  { "input": "2, 5432", "expected": "Page faults: 4." },
-  { "input": "3, 111222", "expected": "Page faults: 2." },
-  { "input": "3, 12312", "expected": "Page faults: 3." }
-]
+{
+  "support": "os_memory",
+  "tests": [
+    { "input": "3, 70120", "expected": "Page faults: 4." },
+    { "input": "3, 123412", "expected": "Page faults: 6." },
+    { "input": "4, 12345", "expected": "Page faults: 5." },
+    { "input": "2, 12123", "expected": "Page faults: 3." },
+    { "input": "3, 01010", "expected": "Page faults: 2." },
+    { "input": "3, 701203", "expected": "Page faults: 5." },
+    { "input": "4, 012301", "expected": "Page faults: 4." },
+    { "input": "2, 5432", "expected": "Page faults: 4." },
+    { "input": "3, 111222", "expected": "Page faults: 2." },
+    { "input": "3, 12312", "expected": "Page faults: 3." }
+  ]
+}

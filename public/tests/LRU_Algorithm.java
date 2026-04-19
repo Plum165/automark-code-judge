@@ -109,7 +109,7 @@ class Solution {
 }
 
 
-public class Main {
+public class LRU_Algorithm {
     public static void main(String[] args) {
         String[] inputs = {
     "3 70120", "3 123412", "4 12345", "2 12123", "3 01010", 
