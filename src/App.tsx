@@ -241,7 +241,23 @@ public class Main {
       e.target.value = ''; // Reset for consecutive uploads
     }
   };
+const downloadSolution = () => {
+    if (!selectedProblem) return;
 
+    // Determine extension based on the current language selection
+    const ext = selectedLang === 'java' ? 'java' : selectedLang === 'python' ? 'py' : 'R';
+    const fileName = `${selectedProblem.id}.${ext}`;
+
+    // Browser looks in the /public folder automatically for paths starting with /
+    const a = document.createElement('a');
+    a.href = `/scripts/${fileName}`;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    setConsoleLogs(prev => [...prev, `Attempting to download reference: ${fileName}`]);
+  };
   const downloadTestFile = () => {
     if (!selectedProblem) return;
     const content = generateJavaHarness(code, selectedProblem, selectedLang);
@@ -309,7 +325,7 @@ public class Main {
             {DYNAMIC_PROBLEMS.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
           </select>
 
-          <button onClick={downloadTestFile} className="p-3.5 bg-blue-500/10 border border-blue-500/20 rounded-2xl text-blue-400" title="Download Local Test Harness"><FileCode size={18}/></button>
+          <button onClick={downloadSolution} className="p-3.5 bg-blue-500/10 border border-blue-500/20 rounded-2xl text-blue-400" title="Download Local Test Harness"><FileCode size={18}/></button>
         </div>
       </motion.header>
 
