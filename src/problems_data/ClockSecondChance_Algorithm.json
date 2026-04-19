@@ -1,0 +1,12 @@
+[
+  { "input": "3 701203", "expected": "Page faults: 5." },
+  { "input": "3 041424", "expected": "Page faults: 4." },
+  { "input": "4 123451", "expected": "Page faults: 6." },
+  { "input": "2 12123", "expected": "Page faults: 3." },
+  { "input": "3 012030", "expected": "Page faults: 5." },
+  { "input": "3 123123", "expected": "Page faults: 3." },
+  { "input": "3 432143", "expected": "Page faults: 6." },
+  { "input": "4 012304", "expected": "Page faults: 5." },
+  { "input": "2 554433", "expected": "Page faults: 3." },
+  { "input": "3 123412", "expected": "Page faults: 6." }
+]

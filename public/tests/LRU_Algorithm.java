@@ -80,39 +80,6 @@ class Memory {
         }
     }
 }
- class FIFO {
-
- public static int firstInFirstOut(final Memory frames, final Integer[] pageReferences) {
-        int pageFaults = 0;
-        /**
-         * Your code here.
-         * 
-         * Using the frames memory object, process the pageReferences using the FIFO paging algorithm, returning the number of page faults.
-         */
-         int frame = 0;
-         
-         for (int ref : pageReferences)
-         {
-            
-            if (!(frames.contains(ref)))
-            {
-              if (frames.isEmpty(frame)){
-               frames.put(frame,ref);}
-               else {
-               int currentPage = frames.get(frame); 
-               frames.replace(currentPage,ref);
-               }
-               pageFaults++;
-               frame = (frame +1) % frames.size();
-               System.out.println(ref + ": " + frames);
-            }
-            else { System.out.println(ref + ": " + "-");}
-            
-         }
-         
-        return pageFaults;
-    }
-}
 
 class Solution {
 
@@ -122,7 +89,7 @@ class Solution {
         int numFrames = sc.nextInt();
         String referenceString = sc.next();
 
-        int faults = FIFO.firstInFirstOut(
+        int faults = FIFO_Algorithm.firstInFirstOut(
             new Memory(numFrames),
             toArray(referenceString)
         );
@@ -145,24 +112,28 @@ class Solution {
 public class Main {
     public static void main(String[] args) {
         String[] inputs = {
-            "3 701203",
-            "3 123412",
-            "4 12345",
-            "2 12123",
-            "3 01010"
-        };
+    "3 70120", "3 123412", "4 12345", "2 12123", "3 01010", 
+    "3 701203", "4 012301", "2 5432", "3 111222", "3 12312"
+};
 
-        String[] expected = {
-            "Page faults: 6.",
-            "Page faults: 6.",
-            "Page faults: 5.",
-            "Page faults: 4.",
-            "Page faults: 2."
-        };
+String[] expected = {
+    "Page faults: 5.",
+    "Page faults: 6.",
+    "Page faults: 5.",
+    "Page faults: 3.",
+    "Page faults: 2.",
+    "Page faults: 3.",
+    "Page faults: 7.",
+    "Page faults: 5.",
+    "Page faults: 4.",
+    "Page faults: 3."
+};
 
         for (int i = 0; i < inputs.length; i++) {
             try {
+            System.out.println("TEST " + (i + 1) + ": Processing ");
                 String result = Solution.execute(inputs[i]);
+                
 
                 if (result != null && result.trim().equals(expected[i].trim())) {
                     System.out.println("TEST " + (i + 1) + ": PASS");

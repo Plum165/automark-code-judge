@@ -2,7 +2,7 @@ import java.util.Scanner;
 import java.util.ArrayList;
 import java.util.List;
 //
-public class FIFO {
+public class FIFO_Algorithm {
 
 public static int optimalPageReplacement(final Memory frames, final Integer[] pageReferences) {
     int pageFaults = 0;
