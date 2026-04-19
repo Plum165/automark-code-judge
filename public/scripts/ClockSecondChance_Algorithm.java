@@ -8,8 +8,8 @@ import java.util.Scanner;
 
 public class ClockSecondChance_Algorithm {
 // Clock Second-Chance Algorithm
-    private static int clockSecondChance(final Memory frames, final Integer[] pageReferences) {
-        System.out.println("Clock Second Chance");
+    public static int clockSecondChance(final Memory frames, final Integer[] pageReferences) {
+      //  System.out.println("Clock Second Chance");
         int pageFaults = 0;
         int clockHand = 0; // Pointer for clock rotation
         Integer[] ref = new Integer[frames.size()]; // Reference bits
@@ -19,7 +19,7 @@ public class ClockSecondChance_Algorithm {
         for (int page : pageReferences) {
             if (frames.contains(page)) {
                 ref[frames.indexOf(page)] = 1;
-                System.out.println(page + ": " + frames + "\tRef Bits: " + print(ref));
+                System.out.println(page + ": -");
                 continue;
             }
 
@@ -41,10 +41,16 @@ public class ClockSecondChance_Algorithm {
                     clockHand = (clockHand + 1) % frames.size();
                 }
             }
-            System.out.println(page + ": " + frames + "\tRef Bits: " + print(ref));
+            
+            System.out.println(page + ": " + frames);
         }
 
         return pageFaults;
+    }
+    
+     // Helper: Converts Integer array to string for display
+    public static String print(Integer[] arr) {
+        return Arrays.toString(arr);
     }
 
     public static void main(final String[] args) {
@@ -60,7 +66,7 @@ public class ClockSecondChance_Algorithm {
         System.out.printf("Page faults: %d.\n", clockSecondChance( new Memory(numFrames), toArray(referenceString)));
     }
 
-    private static Integer[] toArray(final String referenceString) {
+    public static Integer[] toArray(final String referenceString) {
         final Integer[] result = new Integer[referenceString.length()];
         
         for(int i=0; i < referenceString.length(); i++) {

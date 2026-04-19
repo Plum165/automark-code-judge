@@ -89,10 +89,7 @@ class Solution {
         int numFrames = sc.nextInt();
         String referenceString = sc.next();
 
-        int faults = FIFO_Algorithm.firstInFirstOut(
-            new Memory(numFrames),
-            toArray(referenceString)
-        );
+        int faults = LRU_Algorithm.leastRecentlyUsed(new Memory(numFrames),  toArray(referenceString));
 
         return "Page faults: " + faults + ".";
     }
@@ -109,25 +106,26 @@ class Solution {
 }
 
 
-public class ClockSecondChance_Algorithm {
+public class LRU_Algorithm_tests {
     public static void main(String[] args) {
         String[] inputs = {
     "3 70120", "3 123412", "4 12345", "2 12123", "3 01010", 
-    "3 701203", "4 012301", "2 5432", "3 111222", "3 12312"
+    "3 701203", "3 701203042", "2 5432", "3 111222", "3 12312"
 };
 
 String[] expected = {
-    "Page faults: 5.",
     "Page faults: 4.",
     "Page faults: 6.",
-    "Page faults: 3.",
     "Page faults: 5.",
     "Page faults: 3.",
-    "Page faults: 6.",
+    "Page faults: 2.",
     "Page faults: 5.",
-    "Page faults: 3.",
-    "Page faults: 6."
+    "Page faults: 7.",
+    "Page faults: 4.",
+    "Page faults: 2.",
+    "Page faults: 3."
 };
+
         for (int i = 0; i < inputs.length; i++) {
             try {
             System.out.println("TEST " + (i + 1) + ": Processing ");

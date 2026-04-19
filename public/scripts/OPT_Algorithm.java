@@ -6,10 +6,10 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
 
-public class OPT {
+public class OPT_Algorithm {
 
     
-    private static int optimal(final Memory frames, final Integer[] pageReferences) {
+    public static int optimal(final Memory frames, final Integer[] pageReferences) {
             int pageFaults = 0;
 
     for (int i = 0; i < pageReferences.length; i++) {

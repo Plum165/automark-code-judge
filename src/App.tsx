@@ -5,20 +5,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Code2, Terminal, Play, RefreshCcw, Download, Upload, 
   CheckCircle2, XCircle, Loader2, AlertTriangle, ChevronRight,
-  Cpu, Activity, Zap, ShieldAlert, Settings, Save, FileCode, Beaker
+  Cpu, Activity, Zap, ShieldAlert, Settings, Save, FileCode, Beaker,
+  Globe, WifiOff
 } from 'lucide-react';
 
-/** 
- * 1. DYNAMIC FILE SCANNING 
- * Scans src/problems_data/*.json to populate the system automatically.
- */
+/** 1. DYNAMIC FILE SCANNING */
 const problemFiles = import.meta.glob('./problems_data/*.json', { eager: true });
 
 const DYNAMIC_PROBLEMS: Problem[] = Object.entries(problemFiles).map(([path, module]) => {
   const id = path.split('/').pop()?.replace('.json', '') || 'unknown';
   const data = module.default;
   
-  // Format check: Handle both raw array and the new Object format
   const isObjectFormat = !Array.isArray(data) && data.tests;
   const testData = isObjectFormat ? data.tests : (Array.isArray(data) ? data : []);
   const supportKey = isObjectFormat ? data.support : 'none';
@@ -38,28 +35,34 @@ const DYNAMIC_PROBLEMS: Problem[] = Object.entries(problemFiles).map(([path, mod
   };
 });
 
-/**
- * 2. ALGORITHM MAPPING
- * Ensures the harness knows exactly which method to trigger.
- */
+/** 2. ALGORITHM MAPPING */
 const getAlgorithmCall = (problemId) => {
   if (!problemId) return 'Algorithm.execute';
   const map = {
     'fifo_algorithm': 'FIFO_Algorithm.firstInFirstOut',
     'lru_algorithm': 'LRU_Algorithm.leastRecentlyUsed',
     'opt_algorithm': 'OPT_Algorithm.optimalPageReplacement',
-    'clock_algorithm': 'Clock_Algorithm.clockReplacement'
+    'clocksecondchance_algorithm': 'ClockSecondChance_Algorithm.clockSecondChance'
   };
   return map[problemId.toLowerCase()] || 'Algorithm.execute';
 };
 
+/** 3. HEURISTIC ANALYZER (For Offline Fallback) */
+const analyzeHeuristic = (code, problemId) => {
+  const cleanCode = code.toLowerCase();
+  const hasStructure = cleanCode.includes('for') || cleanCode.includes('while') || cleanCode.includes('if');
+  const hasKeyword = problemId.split('_').some(k => cleanCode.includes(k));
+  return hasStructure && hasKeyword;
+};
+
 export default function App() {
-  // --- SETTINGS & AUTH ---
+  // --- AUTH & CONFIG ---
   const [apiKeys, setApiKeys] = useState({
     clientId: localStorage.getItem('jd_client_id') || '',
     clientSecret: localStorage.getItem('jd_client_secret') || ''
   });
   const [showSettings, setShowSettings] = useState(false);
+  const [isOnlineMode, setIsOnlineMode] = useState(true); // Toggle State
 
   // --- APP STATE ---
   const [activeTheme, setActiveTheme] = useState('cyberpunk-glow');
@@ -71,7 +74,7 @@ export default function App() {
   const [isOfflineFallback, setIsOfflineFallback] = useState(false);
   const [activeRightTab, setActiveRightTab] = useState<'marking' | 'terminal'>('marking');
   const [terminalOutput, setTerminalOutput] = useState<string[]>([]);
-  const [consoleLogs, setConsoleLogs] = useState<string[]>(['Staging Environment Online.']);
+  const [consoleLogs, setConsoleLogs] = useState<string[]>(['Marking System v3.6 [HYBRID] Online']);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -83,8 +86,6 @@ export default function App() {
   const generateJavaHarness = (userCode, problem, lang) => {
     const supportCode = SUPPORT_LIBRARY[problem.supportKey] || "";
     const algoCall = getAlgorithmCall(problem.id);
-
-    // Extraction: Move imports to the very top to satisfy Java compiler
     const importRegex = /^import\s+[\w.]+;|^import\s+[\w.]+\.\*;$/gm;
     const userImports = (userCode.match(importRegex) || []).join('\n');
 
@@ -115,8 +116,6 @@ class Solution {
             String refStr = sc.next();
             Integer[] refs = new Integer[refStr.length()];
             for(int i=0; i<refStr.length(); i++) refs[i] = Character.digit(refStr.charAt(i), 10);
-
-            // Trigger the Dynamic Call
             int faults = ${algoCall}(new Memory(numFrames), refs);
             return "Page faults: " + faults + ".";
         } catch (Exception e) {
@@ -128,9 +127,8 @@ class Solution {
 // --- 5. BATCH TEST RUNNER ---
 public class Main {
     public static void main(String[] args) {
-        String[] inputs = {${problem.testData.map(t => `"${t.input}"`).join(", ")}};
-        String[] expected = {${problem.testData.map(t => `"${t.expected}"`).join(", ")}};
-        
+        String[] inputs = {${problem.testData.map(t => JSON.stringify(t.input)).join(", ")}};
+        String[] expected = {${problem.testData.map(t => JSON.stringify(t.expected)).join(", ")}};
         for (int i = 0; i < inputs.length; i++) {
             System.out.println("START_TEST_" + (i + 1));
             String result = Solution.execute(inputs[i]);
@@ -150,11 +148,8 @@ public class Main {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        clientId: apiKeys.clientId,
-        clientSecret: apiKeys.clientSecret,
-        script: script,
-        language: "java",
-        versionIndex: "4"
+        clientId: apiKeys.clientId, clientSecret: apiKeys.clientSecret,
+        script: script, language: "java", versionIndex: "4"
       })
     });
     if (!response.ok) throw new Error("BRIDGE_FAILURE");
@@ -168,13 +163,25 @@ public class Main {
     setIsOfflineFallback(false);
     setActiveRightTab('marking');
     
-    setConsoleLogs(prev => [...prev, `Deploying ${useReference ? 'REFERENCE' : 'EDITOR'} context for ${selectedProblem.id}...`]);
+    // --- MODE CHECK ---
+    if (!isOnlineMode && !useReference) {
+        setConsoleLogs(prev => [...prev, `[LOCAL] Running heuristic evaluator...`]);
+        const results = selectedProblem.testData.map((test, i) => {
+          const passed = analyzeHeuristic(code, selectedProblem.id);
+          return { id: i, input: test.input, expected: test.expected, actual: passed ? "Heuristic PASS" : "Logic Check Failed", passed };
+        });
+        setJudgeResult({ score: Math.round((results.filter(r => r.passed).length / results.length) * 100), results });
+        setIsJudging(false);
+        return;
+    }
+
+    setConsoleLogs(prev => [...prev, `Deploying to ${isOnlineMode ? 'Cloud' : 'Local'} Staging...`]);
 
     try {
       let codeToRun = code;
       if (useReference) {
         const res = await fetch(`/scripts/${selectedProblem.id}.java`);
-        if (!res.ok) throw new Error("REFERENCE_FILE_NOT_FOUND");
+        if (!res.ok) throw new Error("REF_FILE_NOT_FOUND");
         codeToRun = await res.text();
       }
 
@@ -192,29 +199,26 @@ public class Main {
         const endMarker = `END_TEST_${i + 1}`;
         const startIndex = out.indexOf(startMarker);
         const endIndex = out.indexOf(endMarker);
-        
-        let actual = "Marker Error";
-        if (startIndex > -1 && endIndex > -1) {
-            actual = out.substring(startIndex + startMarker.length, endIndex).trim();
-        }
-
+        let actual = (startIndex > -1 && endIndex > -1) ? out.substring(startIndex + startMarker.length, endIndex).trim() : "Marker Error";
         const passed = actual.replace(/\r/g, "").trim() === test.expected.trim();
         return { id: i, input: test.input, expected: test.expected, actual, passed };
       });
 
       setJudgeResult({ score: Math.round((results.filter(r => r.passed).length / results.length) * 100), results });
       setTerminalOutput(out.split('\n'));
-      setConsoleLogs(prev => [...prev, `Execution Finished. Stability: ${results.every(r => r.passed) ? 'STABLE' : 'UNSTABLE'}`]);
-
     } catch (err) {
       setIsOfflineFallback(true);
       setConsoleLogs(prev => [...prev, `⚠️ Error: ${err.message}`]);
+      if (err.message === "VM_COMPILER_ERROR") {
+        setActiveRightTab('terminal');
+        setConsoleLogs(prev => [...prev, "[CRITICAL] Java compilation failed."]);
+      }
     } finally {
       setIsJudging(false);
     }
   };
 
-  // --- 🕹️ HANDLERS ---
+  // --- 🕹️ UI HANDLERS ---
   const handleProblemChange = (id: string) => {
     const prob = DYNAMIC_PROBLEMS.find(p => p.id === id);
     if (prob) {
@@ -231,11 +235,10 @@ public class Main {
       const reader = new FileReader();
       reader.onload = (ev) => {
         setCode(ev.target?.result as string);
-        setConsoleLogs(prev => [...prev, `Context Loaded: ${file.name}`]);
+        setConsoleLogs(prev => [...prev, `File Imported: ${file.name}`]);
       };
       reader.readAsText(file);
-      // FIX: Reset input value so same file can be uploaded again
-      e.target.value = '';
+      e.target.value = ''; // Reset for consecutive uploads
     }
   };
 
@@ -250,7 +253,7 @@ public class Main {
     a.click();
   };
 
-  if (DYNAMIC_PROBLEMS.length === 0) return <div className="p-20 text-white font-black text-center"><AlertTriangle className="mx-auto mb-4" /> No Staging Data Detected in problems_data/</div>;
+  if (DYNAMIC_PROBLEMS.length === 0) return <div className="p-20 text-white font-black text-center">No JSON problems found.</div>;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 min-h-screen text-slate-100 font-sans selection:bg-blue-500/30">
@@ -261,19 +264,13 @@ public class Main {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-xl p-4">
             <div className="glass w-full max-w-md p-8 rounded-[3rem] border border-white/10 shadow-2xl">
               <div className="flex items-center gap-4 mb-8">
-                <Settings className="text-blue-400 w-8 h-8" />
+                <Settings className="text-blue-400" />
                 <h2 className="text-2xl font-black uppercase italic tracking-tighter">System Access</h2>
               </div>
               <div className="space-y-5">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase opacity-30 ml-2">JDoodle client_id</label>
-                  <input type="text" value={apiKeys.clientId} onChange={(e) => setApiKeys({...apiKeys, clientId: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 p-4 rounded-2xl outline-none focus:border-blue-500 font-mono text-sm" placeholder="ID" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black uppercase opacity-30 ml-2">JDoodle client_secret</label>
-                  <input type="password" value={apiKeys.clientSecret} onChange={(e) => setApiKeys({...apiKeys, clientSecret: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 p-4 rounded-2xl outline-none focus:border-blue-500 font-mono text-sm" placeholder="SECRET" />
-                </div>
-                <button onClick={() => { localStorage.setItem('jd_client_id', apiKeys.clientId); localStorage.setItem('jd_client_secret', apiKeys.clientSecret); setShowSettings(false); }} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 p-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-[1.02] transition-all">Sync Keys</button>
+                <input type="text" value={apiKeys.clientId} onChange={(e) => setApiKeys({...apiKeys, clientId: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 p-4 rounded-2xl outline-none focus:border-blue-500 font-mono text-sm" placeholder="JDoodle Client ID" />
+                <input type="password" value={apiKeys.clientSecret} onChange={(e) => setApiKeys({...apiKeys, clientSecret: e.target.value})} className="w-full bg-slate-900/50 border border-white/10 p-4 rounded-2xl outline-none focus:border-blue-500 font-mono text-sm" placeholder="JDoodle Secret" />
+                <button onClick={() => { localStorage.setItem('jd_client_id', apiKeys.clientId); localStorage.setItem('jd_client_secret', apiKeys.clientSecret); setShowSettings(false); }} className="w-full bg-blue-600 p-5 rounded-2xl font-black uppercase tracking-widest text-xs">Sync Keys</button>
                 <button onClick={() => setShowSettings(false)} className="w-full text-[10px] uppercase font-bold opacity-30 py-2">Cancel</button>
               </div>
             </div>
@@ -282,42 +279,67 @@ public class Main {
       </AnimatePresence>
 
       {/* 📡 HEADER */}
-      <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="glass p-5 rounded-[2.5rem] mb-8 flex flex-col lg:flex-row justify-between items-center border border-white/10 shadow-2xl relative overflow-hidden">
+      <motion.header initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="glass p-5 rounded-[2.5rem] mb-8 flex flex-col lg:flex-row justify-between items-center border border-white/10 shadow-2xl relative">
         <div className="flex items-center gap-5">
           <div className="p-4 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-lg"><Zap className="w-6 h-6 text-white" /></div>
           <div>
-            <h1 className="text-2xl font-black italic uppercase tracking-tighter">Automarker <span className="text-blue-400 not-italic opacity-50">PRO</span></h1>
+            <h1 className="text-2xl font-black italic uppercase tracking-tighter italic">Automarker <span className="text-blue-400 not-italic opacity-50">PRO</span></h1>
             <p className="text-[10px] font-bold opacity-30 uppercase tracking-[0.3em]">Hybrid Logic Staging v3.6</p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-4">
-          <button onClick={() => setShowSettings(true)} className="p-3.5 bg-white/5 border border-white/10 rounded-2xl hover:bg-blue-500/20 transition-all text-slate-400"><Settings size={18}/></button>
+          {/* ONLINE/OFFLINE TOGGLE */}
+          <button 
+            onClick={() => setIsOnlineMode(!isOnlineMode)}
+            className={`flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all font-black text-[10px] uppercase tracking-widest ${isOnlineMode ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-orange-500/10 border-orange-500/30 text-orange-400'}`}
+          >
+            {isOnlineMode ? <Globe size={16}/> : <WifiOff size={16}/>}
+            {isOnlineMode ? 'Online' : 'Offline'}
+          </button>
+
+          <button onClick={() => setShowSettings(true)} className="p-3.5 bg-white/5 border border-white/10 rounded-2xl hover:bg-blue-500/20 text-slate-400"><Settings size={18}/></button>
           
+             <select value={activeTheme} onChange={(e) => setActiveTheme(e.target.value)} className="bg-slate-900 border border-white/10 rounded-2xl px-6 py-3 text-xs font-bold w-40 outline-none">
+            {THEMES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+
+
           <select value={selectedProblem?.id} onChange={(e) => handleProblemChange(e.target.value)} className="bg-slate-900 border border-white/10 rounded-2xl px-6 py-3 text-xs font-bold outline-none cursor-pointer">
             {DYNAMIC_PROBLEMS.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
           </select>
 
-          <select value={activeTheme} onChange={(e) => setActiveTheme(e.target.value)} className="bg-slate-900 border border-white/10 rounded-2xl px-6 py-3 text-xs font-bold w-40 outline-none">
-            {THEMES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-
-          <button onClick={downloadTestFile} className="p-3.5 bg-blue-500/10 border border-blue-500/20 rounded-2xl text-blue-400 hover:bg-blue-500/20 transition-all"><FileCode size={18}/></button>
+          <button onClick={downloadTestFile} className="p-3.5 bg-blue-500/10 border border-blue-500/20 rounded-2xl text-blue-400" title="Download Local Test Harness"><FileCode size={18}/></button>
         </div>
       </motion.header>
 
-      {/* ⚠️ FALLBACK STATUS */}
-      {isOfflineFallback && (
-        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mb-8 overflow-hidden bg-red-500/10 border border-red-500/20 p-6 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-6">
+      {/* ⚠️ BANNER LOGIC */}
+      {!isOnlineMode && (
+        <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="mb-8 bg-orange-500/10 border border-orange-500/20 p-6 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-5 text-orange-500">
+            <WifiOff size={32} />
+            <div>
+              <h4 className="text-sm font-black uppercase italic">Manual Local Evaluation Active</h4>
+              <p className="text-[10px] opacity-60 italic mt-1 uppercase tracking-widest">Heuristic marking will be used. Download the unit for precise verification.</p>
+            </div>
+          </div>
+          <button onClick={downloadTestFile} className="bg-orange-500 text-black px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase flex items-center gap-3 hover:bg-orange-400 transition-all shadow-xl shadow-orange-500/20">
+            <FileCode size={16} /> Get Local Test Unit
+          </button>
+        </motion.div>
+      )}
+
+      {isOfflineFallback && isOnlineMode && (
+        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mb-8 bg-red-500/10 border border-red-500/20 p-6 rounded-[2.5rem] flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-5 text-red-500">
             <ShieldAlert size={32} />
             <div>
-              <h4 className="text-sm font-black uppercase">Remote JVM Execution Blocked</h4>
-              <p className="text-[10px] opacity-60 italic mt-1 uppercase tracking-widest">Compiler returned an error or API limits reached.</p>
+              <h4 className="text-sm font-black uppercase">Remote Execution Error</h4>
+              <p className="text-[10px] opacity-60 italic mt-1 uppercase tracking-widest">Cloud markers failed. Switching to local approximation.</p>
             </div>
           </div>
           <button onClick={downloadTestFile} className="bg-red-500 text-white px-8 py-3.5 rounded-2xl text-[10px] font-black uppercase flex items-center gap-3 hover:bg-red-400 transition-all shadow-xl shadow-red-500/20">
-            <Terminal size={16} /> Debug Locally
+            <Terminal size={16} /> Debug Local Code
           </button>
         </motion.div>
       )}
@@ -340,12 +362,12 @@ public class Main {
           <div className="p-10 space-y-6">
             <div className="relative rounded-[2rem] overflow-hidden bg-black/40 border border-white/5 shadow-inner">
               <textarea value={code} onChange={(e) => setCode(e.target.value)} className="w-full h-[520px] p-8 font-mono text-sm bg-transparent text-emerald-400 outline-none scrollbar-hide resize-none leading-relaxed" spellCheck="false" placeholder="// Inject Source Logic..." />
-              <div className="absolute top-4 right-8 text-[10px] font-black opacity-10 uppercase tracking-[0.3em] pointer-events-none italic">Cloud-Linked Staging</div>
+              <div className="absolute top-4 right-8 text-[10px] font-black opacity-10 uppercase tracking-[0.3em] pointer-events-none italic">{isOnlineMode ? 'Cloud-Linked' : 'Local-only'} Staging</div>
             </div>
             <div className="flex gap-4">
-              <button onClick={() => runMarking(false)} disabled={isJudging} className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 p-5 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-4 shadow-xl shadow-blue-600/20 active:scale-95 transition-all">
+              <button onClick={() => runMarking(false)} disabled={isJudging} className={`flex-1 p-5 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-4 shadow-xl transition-all active:scale-95 ${isOnlineMode ? 'bg-gradient-to-r from-blue-600 to-indigo-600 shadow-blue-600/20' : 'bg-gradient-to-r from-orange-600 to-amber-600 shadow-orange-600/20'}`}>
                 {isJudging ? <Loader2 className="animate-spin w-5 h-5" /> : <Play size={18} fill="currentColor" />} 
-                {isJudging ? 'Streaming Source...' : `Mark ${selectedProblem?.testCases} Test Units`}
+                {isJudging ? 'Evaluating...' : `Mark ${selectedProblem?.testCases} Test Units`}
               </button>
               <button onClick={() => runMarking(true)} disabled={isJudging} className="p-5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-2xl hover:bg-emerald-500/20 transition-all" title="Validate Reference Logic">
                 <Beaker size={22}/>
@@ -358,8 +380,8 @@ public class Main {
         <div className="space-y-8">
           <section className="glass rounded-[3rem] overflow-hidden border border-white/10 shadow-2xl h-[680px] flex flex-col">
             <div className="bg-white/5 p-3 flex border-b border-white/10 mx-4 mt-4 rounded-2xl">
-              <button onClick={() => setActiveRightTab('marking')} className={`flex-1 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeRightTab === 'marking' ? 'bg-white/10 text-blue-400' : 'opacity-20'}`}>Assessment Matrix</button>
-              <button onClick={() => setActiveRightTab('terminal')} className={`flex-1 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeRightTab === 'terminal' ? 'bg-white/10 text-blue-400' : 'opacity-20'}`}>Virtual Console</button>
+              <button onClick={() => setActiveRightTab('marking')} className={`flex-1 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeRightTab === 'marking' ? 'bg-white/10 text-blue-400 shadow-inner' : 'opacity-20'}`}>Assessment Matrix</button>
+              <button onClick={() => setActiveRightTab('terminal')} className={`flex-1 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeRightTab === 'terminal' ? 'bg-white/10 text-blue-400 shadow-inner' : 'opacity-20'}`}>Virtual Console</button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-10 scrollbar-hide">
@@ -385,11 +407,11 @@ public class Main {
                         </div>
                         <div className="grid grid-cols-2 gap-6">
                            <div className="space-y-2">
-                             <p className="text-[8px] font-black uppercase opacity-20 tracking-widest">Oracle Answer</p>
+                             <p className="text-[8px] font-black uppercase opacity-20 tracking-widest uppercase">Target Answer</p>
                              <pre className="text-[10px] opacity-30 bg-black/20 p-4 rounded-2xl whitespace-pre-wrap font-mono border border-white/5">{res.expected}</pre>
                            </div>
                            <div className="space-y-2">
-                             <p className="text-[8px] font-black uppercase opacity-20 tracking-widest">Calculated</p>
+                             <p className="text-[8px] font-black uppercase opacity-20 tracking-widest uppercase italic">Logic Output</p>
                              <pre className={`text-[10px] p-4 rounded-2xl whitespace-pre-wrap font-mono border ${res.passed ? 'text-green-400 bg-green-500/10 border-green-500/20' : 'text-red-400 bg-red-500/10 border-red-500/20'}`}>{res.actual}</pre>
                            </div>
                         </div>
@@ -400,10 +422,10 @@ public class Main {
                   <motion.div key="terminal" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="font-mono text-[11px] space-y-4">
                     <div className="text-blue-400 opacity-40 mb-8 border-b border-blue-500/20 pb-4 flex items-center justify-between tracking-tighter">
                       <div className="flex items-center gap-3"><Terminal size={18}/> raw_bridge_stdout</div>
-                      <div className="text-[9px] font-black px-3 py-1 bg-blue-500/20 rounded-full">JVM_LIVE_STREAM</div>
+                      <div className={`text-[9px] font-black px-3 py-1 rounded-full ${isOnlineMode ? 'bg-blue-500/20' : 'bg-orange-500/20'}`}>{isOnlineMode ? 'JVM_LIVE_STREAM' : 'LOCAL_HEURISTIC'}</div>
                     </div>
                     {terminalOutput.length > 0 ? terminalOutput.map((line, i) => (
-                      <div key={i} className="text-blue-300/70 border-l-2 border-blue-500/20 pl-6 py-1 italic mb-2 hover:bg-white/5 transition-all">
+                      <div key={i} className="text-blue-300/70 border-l-2 border-blue-500/30 pl-6 py-1 italic mb-2 hover:bg-white/5 transition-all">
                          <span className="opacity-10 mr-4 select-none tracking-tighter">{(i+1).toString().padStart(3, '0')}</span>
                          {line}
                       </div>

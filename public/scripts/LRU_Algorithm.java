@@ -1,9 +1,9 @@
 import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class LRU_Algorithm {
      // Least Recently Used (LRU) Page Replacement
-    private static int leastRecentlyUsed(final Memory frames, final Integer[] pageReferences) {
+    public static int leastRecentlyUsed(final Memory frames, final Integer[] pageReferences) {
         System.out.println("Least Recently Used (LRU)");
         int pageFaults = 0;
         List<Integer> recentHistory = new ArrayList<>(); // Tracks usage order
