@@ -89,7 +89,7 @@ public static int leastRecentlyUsed(final Memory frames, final Integer[] pageRef
 
     return pageFaults;
 }
-    private static int firstInFirstOut(final Memory frames, final Integer[] pageReferences) {
+    public static int firstInFirstOut(final Memory frames, final Integer[] pageReferences) {
         int pageFaults = 0;
         /**
          * Your code here.

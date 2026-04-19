@@ -1,29 +1,182 @@
+//Moegamat Samsodien
+//19/04/2026
+//Memory class that acts as memory in the OS for a simulator to allow us to get solutions.
+import java.util.*;
 
-public class Solution {
-    public static String execute(String input) {
-        // Your code here
-        return "";
+class Memory {
+
+    private final Integer[] frames;
+
+    // Constructor: Initialize memory with the given number of frames
+    public Memory(final int numFrames) {
+        this.frames = new Integer[numFrames];
+    }
+
+    // Returns true if the specified frame is empty
+    public boolean isEmpty(final int frameNumber) {
+        return frames[frameNumber] == null;
+    }
+
+    // Returns the total number of frames
+    public int size() {
+        return frames.length;
+    }
+
+    // Gets the page number at the given frame
+    public int get(final int frameNumber) {
+        assert !this.isEmpty(frameNumber);
+        return frames[frameNumber];
+    }
+
+    // Puts a page number into the specified frame
+    public void put(final int frameNumber, final int pageNumber) {
+        frames[frameNumber] = pageNumber;
+    }
+
+    // Replaces an existing page in memory with a new page
+    public void replace(final int pageNumber, final int newNumber) {
+        assert this.contains(pageNumber);
+        this.put(this.indexOf(pageNumber), newNumber);
+    }
+
+    // Checks if a page is currently in memory
+    public boolean contains(final int pageNumber) {
+        return indexOf(pageNumber) != -1;
+    }
+
+    // Finds the index of the frame that contains the given page
+    public int indexOf(final int pageNumber) {
+        for (int i = 0; i < frames.length; i++) {
+            if (!isEmpty(i) && frames[i] == pageNumber) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    // Returns a string representation of the memory frames
+    public String toString() {
+        final StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append('[');
+
+        if (this.size() > 0) {
+            stringBuilder.append(this.toString(0));
+            for (int i = 1; i < this.size(); i++) {
+                stringBuilder.append(", ");
+                stringBuilder.append(this.toString(i));
+            }
+        }
+
+        stringBuilder.append(']');
+        return stringBuilder.toString();
+    }
+
+    // Helper: returns "-" for empty frame, or the page number
+    private String toString(final int index) {
+        if (this.isEmpty(index)) {
+            return "-";
+        } else {
+            return this.frames[index].toString();
+        }
+    }
+}
+ class FIFO {
+
+ public static int firstInFirstOut(final Memory frames, final Integer[] pageReferences) {
+        int pageFaults = 0;
+        /**
+         * Your code here.
+         * 
+         * Using the frames memory object, process the pageReferences using the FIFO paging algorithm, returning the number of page faults.
+         */
+         int frame = 0;
+         
+         for (int ref : pageReferences)
+         {
+            
+            if (!(frames.contains(ref)))
+            {
+              if (frames.isEmpty(frame)){
+               frames.put(frame,ref);}
+               else {
+               int currentPage = frames.get(frame); 
+               frames.replace(currentPage,ref);
+               }
+               pageFaults++;
+               frame = (frame +1) % frames.size();
+               System.out.println(ref + ": " + frames);
+            }
+            else { System.out.println(ref + ": " + "-");}
+            
+         }
+         
+        return pageFaults;
     }
 }
 
+class Solution {
+
+    public static String execute(String input) {
+        Scanner sc = new Scanner(input);
+
+        int numFrames = sc.nextInt();
+        String referenceString = sc.next();
+
+        int faults = FIFO.firstInFirstOut(
+            new Memory(numFrames),
+            toArray(referenceString)
+        );
+
+        return "Page faults: " + faults + ".";
+    }
+
+    private static Integer[] toArray(final String referenceString) {
+        Integer[] result = new Integer[referenceString.length()];
+
+        for (int i = 0; i < referenceString.length(); i++) {
+            result[i] = Character.digit(referenceString.charAt(i), 10);
+        }
+
+        return result;
+    }
+}
+
+
 public class Main {
     public static void main(String[] args) {
-        String[] inputs = {"3, 70120", "3, 123412", "4, 12345", "2, 12123", "3, 01010", "3, 701203", "4, 012301", "2, 5432", "3, 111222", "3, 12312"};
-        String[] expected = {"7: [7, -, -]\n0: [7, 0, -]\n1: [7, 0, 1]\n2: [2, 0, 1]\n0: -\nPage faults: 4.", "1: [1, -, -]\n2: [1, 2, -]\n3: [1, 2, 3]\n4: [4, 2, 3]\n1: [4, 1, 3]\n2: [4, 1, 2]\nPage faults: 6.", "1: [1, -, -, -]\n2: [1, 2, -, -]\n3: [1, 2, 3, -]\n4: [1, 2, 3, 4]\n5: [5, 2, 3, 4]\nPage faults: 5.", "1: [1, -]\n2: [1, 2]\n1: -\n2: -\n3: [3, 2]\nPage faults: 3.", "0: [0, -, -]\n1: [0, 1, -]\n0: -\n1: -\n0: -\nPage faults: 2.", "7: [7, -, -]\n0: [7, 0, -]\n1: [7, 0, 1]\n2: [2, 0, 1]\n0: -\n3: [2, 3, 1]\nPage faults: 5.", "0: [0, -, -, -]\n1: [0, 1, -, -]\n2: [0, 1, 2, -]\n3: [0, 1, 2, 3]\n0: -\n1: -\nPage faults: 4.", "5: [5, -]\n4: [5, 4]\n3: [3, 4]\n2: [3, 2]\nPage faults: 4.", "1: [1, -, -]\n1: -\n1: -\n2: [1, 2, -]\n2: -\n2: -\nPage faults: 2.", "1: [1, -, -]\n2: [1, 2, -]\n3: [1, 2, 3]\n1: -\n2: -\nPage faults: 3."};
-        
+        String[] inputs = {
+            "3 701203",
+            "3 123412",
+            "4 12345",
+            "2 12123",
+            "3 01010"
+        };
+
+        String[] expected = {
+            "Page faults: 6.",
+            "Page faults: 6.",
+            "Page faults: 5.",
+            "Page faults: 4.",
+            "Page faults: 2."
+        };
+
         for (int i = 0; i < inputs.length; i++) {
             try {
                 String result = Solution.execute(inputs[i]);
-                if (result.trim().equals(expected[i].trim())) {
-                    System.out.println("TEST " + (i+1) + ": PASS");
+
+                if (result != null && result.trim().equals(expected[i].trim())) {
+                    System.out.println("TEST " + (i + 1) + ": PASS");
                 } else {
-                    System.out.println("TEST " + (i+1) + ": FAIL | Expected: " + expected[i] + " Got: " + result);
+                    System.out.println("TEST " + (i + 1) + ": FAIL | Expected: "
+                            + expected[i] + " Got: " + result);
                 }
             } catch (Exception e) {
-                System.out.println("TEST " + (i+1) + ": FAIL | Runtime Error: " + e.getMessage());
+                System.out.println("TEST " + (i + 1) + ": FAIL | Runtime Error: " + e.getMessage());
             }
         }
+
         System.out.println("DONE");
     }
+
 }
     

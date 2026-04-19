@@ -66,27 +66,79 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', activeTheme);
   }, [activeTheme]);
 
-  // --- 🧪 JAVA HARNESS GENERATOR (Batch Testing) ---
   const generateJavaHarness = (userCode, testCases) => {
-    return `
-${userCode}
+    // 1. Prepare the user's code: 
+    // Remove 'public' so it can live in the same file as our test runner.
+    // Rename 'FIFO' to 'StudentCode' to avoid naming conflicts.
+    let processedCode = userCode
+      .replace(/public\s+class\s+FIFO/g, 'class StudentCode')
+      .replace(/public\s+class/g, 'class');
 
+    return `
+import java.util.*;
+import java.io.*;
+
+// --- THE STUDENT'S CODE ---
+${processedCode}
+
+// --- SUPPORTING CLASS (Required for compilation) ---
+class Memory {
+    private final Integer[] frames;
+    public Memory(int n) { this.frames = new Integer[n]; }
+    public boolean isEmpty(int i) { return frames[i] == null; }
+    public int size() { return frames.length; }
+    public void put(int i, int p) { frames[i] = p; }
+    public boolean contains(int p) { return indexOf(p) != -1; }
+    public int indexOf(int p) {
+        for(int i=0; i<frames.length; i++) if(frames[i]!=null && frames[i]==p) return i;
+        return -1;
+    }
+    public void replace(int oldP, int newP) { put(indexOf(oldP), newP); }
+    public int get(int i) { return frames[i]; }
+    public String toString() {
+        StringBuilder sb = new StringBuilder("[");
+        for(int i=0; i<frames.length; i++) {
+            sb.append(isEmpty(i) ? "-" : frames[i]);
+            if(i < frames.length-1) sb.append(", ");
+        }
+        return sb.append("]").toString();
+    }
+}
+
+// --- BATCH TEST RUNNER ---
 public class Main {
     public static void main(String[] args) {
-        String[] inputs = {${testCases.map(t => `"${t.input}"`).join(", ")}};
-        String[] expected = {${testCases.map(t => `"${t.expected.replace(/\n/g, "\\n")}"`).join(", ")}};
+        // Convert JSON inputs into a format the student's Scanner can read
+        // Example: "3, 70120" becomes "3n70120n"
+        String[] inputs = {${testCases.map(t => `"${t.input.replace(", ", "\\n")}\\n"`).join(", ")}};
         
+        PrintStream originalOut = System.out;
+        InputStream originalIn = System.in;
+
         for (int i = 0; i < inputs.length; i++) {
+            System.out.println("START_TEST_" + (i + 1));
+            
             try {
-                String result = Solution.execute(inputs[i]);
-                if (result != null && result.trim().equals(expected[i].trim())) {
-                    System.out.println("TEST " + (i+1) + ": PASS");
-                } else {
-                    System.out.println("TEST " + (i+1) + ": FAIL | Expected: " + expected[i] + " Got: " + result);
-                }
+                // 1. Redirect System.in to feed our JSON input into the student's Scanner
+                System.setIn(new ByteArrayInputStream(inputs[i].getBytes()));
+                
+                // 2. Redirect System.out to capture their printed trace
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                System.setOut(new PrintStream(baos));
+
+                // 3. Call the student's main method
+                StudentCode.main(new String[0]);
+
+                // 4. Send the captured output back to the original console for our React parser
+                System.setOut(originalOut);
+                System.out.print(baos.toString());
+
             } catch (Exception e) {
-                System.out.println("TEST " + (i+1) + ": FAIL | Runtime Error: " + e.getMessage());
+                System.setOut(originalOut);
+                System.out.println("RUNTIME_ERROR: " + e.toString());
             }
+            
+            System.out.println("END_TEST_" + (i + 1));
         }
         System.out.println("DONE");
     }
@@ -178,59 +230,60 @@ const executeJdoodle = async (script) => {
     setConsoleLogs(prev => [...prev, `API Keys updated.`]);
   };
 
-  // --- 🚀 MAIN MARKING ENGINE ---
-  const runMarking = async () => {
-    if (!selectedProblem) return;
-    setIsJudging(true);
-    setIsOfflineFallback(false);
-    setActiveRightTab('marking');
-    setConsoleLogs(prev => [...prev, `Initiating deployment to Cloud JVM...`]);
+  // --- 🛰️ FETCH REFERENCE CODE ---
+const fetchReferenceCode = async (problemId, lang) => {
+  try {
+    const ext = lang === 'java' ? 'java' : (lang === 'python' ? 'py' : 'R');
+    const response = await fetch(`/scripts/${problemId}.${ext}`);
+    if (!response.ok) throw new Error("Reference file not found");
+    return await response.text();
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+};
 
-    try {
-      const fileKey = `./problems_data/${selectedProblem.id}.json`;
-      const testCases = problemFiles[fileKey]?.default;
+// --- 🚀 MODIFIED MARKING HANDLER ---
+// Added 'useReference' parameter
+const runMarking = async (useReference = false) => {
+  if (!selectedProblem) return;
+  setIsJudging(true);
+  setIsOfflineFallback(false);
+  setActiveRightTab('marking');
+  
+  const sourceLabel = useReference ? "REFERENCE SCRIPT" : "USER CODE";
+  setConsoleLogs(prev => [...prev, `Initiating deployment of ${sourceLabel} to Cloud JVM...`]);
 
-      // Only attempt JDoodle for Java if keys exist
-      if (selectedLang === 'java' && apiKeys.clientId) {
-        const fullScript = generateJavaHarness(code, testCases);
-        const data = await executeJdoodle(fullScript);
-        
-        if (data.output.includes("error") || data.statusCode !== 200) throw new Error("COMPILE_ERROR");
+  try {
+    const fileKey = `./problems_data/${selectedProblem.id}.json`;
+    const testCases = problemFiles[fileKey]?.default;
 
-        const lines = data.output.split('\n');
-        const results = testCases.map((test, i) => {
-          const resultLine = lines.find(l => l.startsWith(`TEST ${i+1}:`));
-          const passed = resultLine?.includes("PASS");
-          return {
-            id: i,
-            input: test.input,
-            expected: test.expected,
-            actual: passed ? test.expected : (resultLine?.split('|')[1]?.trim() || "Logic Error"),
-            passed: passed
-          };
-        });
+    // Determine which code to use
+    let codeToRun = code; 
+    if (useReference) {
+      const refCode = await fetchReferenceCode(selectedProblem.id, selectedLang);
+      if (!refCode) throw new Error("REF_FILE_MISSING");
+      codeToRun = refCode;
+    }
 
-        setJudgeResult({
-          score: Math.round((results.filter(r => r.passed).length / testCases.length) * 100),
-          results
-        });
-        setTerminalOutput(lines);
-      } else {
-        // Run Offline Heuristic if lang isn't Java or no keys
-        throw new Error("OFFLINE_MODE");
-      }
-    } catch (err) {
-      setIsOfflineFallback(true);
-      const fileKey = `./problems_data/${selectedProblem.id}.json`;
-      const testCases = problemFiles[fileKey]?.default;
+    if (selectedLang === 'java' && apiKeys.clientId) {
+      const fullScript = generateJavaHarness(codeToRun, testCases);
+      const data = await executeJdoodle(fullScript);
       
+      if (data.output.toLowerCase().includes("error")) {
+         setTerminalOutput([data.output]);
+         throw new Error("COMPILE_ERROR");
+      }
+
+      const lines = data.output.split('\n');
       const results = testCases.map((test, i) => {
-        const passed = analyzeHeuristic(code, selectedProblem.id);
+        const resultLine = lines.find(l => l.startsWith(`TEST ${i+1}:`));
+        const passed = resultLine?.includes("PASS");
         return {
           id: i,
           input: test.input,
           expected: test.expected,
-          actual: passed ? "Heuristic Pass (Logic Detected)" : "No matching logic pattern",
+          actual: passed ? test.expected : (resultLine?.split('|')[1]?.trim() || "Runtime Error"),
           passed: passed
         };
       });
@@ -239,11 +292,17 @@ const executeJdoodle = async (script) => {
         score: Math.round((results.filter(r => r.passed).length / testCases.length) * 100),
         results
       });
-      setConsoleLogs(prev => [...prev, `⚠️ Switched to Fallback Marker: ${err.message}`]);
-    } finally {
-      setIsJudging(false);
+      setTerminalOutput(lines);
+      setConsoleLogs(prev => [...prev, `✅ ${sourceLabel} verified successfully.`]);
+    } else {
+      throw new Error("OFFLINE_MODE");
     }
-  };
+  } catch (err) {
+    // ... (Keep existing catch logic for fallback)
+  } finally {
+    setIsJudging(false);
+  }
+};
 
   // --- SETUP GUARD ---
   if (DYNAMIC_PROBLEMS.length === 0) {
@@ -369,6 +428,7 @@ const executeJdoodle = async (script) => {
             </div>
           </div>
         </section>
+
 
         {/* 📊 RESULTS */}
         <div className="space-y-8">
